@@ -1,0 +1,12 @@
+[submodule "printer-service"]
+	path = printer-service
+	url = git@github.com:DHREngineering/printer-service.git
+[submodule "pantheon-api"]
+	path = pantheon-api
+	url = git@github.com:DHREngineering/pantheon-api.git
+[submodule "printer-utilization"]
+	path = printer-utilization
+	url = git@github.com:DHREngineering/printer-utilization.git
+[submodule "robot-arm-orchestrator"]
+	path = robot-arm-orchestrator
+	url = git@github.com:DHREngineering/robot-arm-orchestrator.git

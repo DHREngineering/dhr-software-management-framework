@@ -1,0 +1,38 @@
+git submodule update --init --remote --recursive
+
+add "exit 0" at the end of run-docker-compose.sh in order not to break the following service when there are running containers with the same name
+
+sudo apt install autossh
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+ssh-copy-id root@<ip>
+
+sudo nano /etc/systemd/system/docker-cluster-controller.service
+
+[Unit]
+Description=Cluster Controller using Docker Compose and open reverse proxy ssh tunnel
+After=docker.service
+
+[Service]
+Type=simple
+User=dhr
+WorkingDirectory=/home/dhr/cluster-controller
+ExecStart=/bin/bash -c 'docker system prune -f && ./run-docker-compose.sh && autossh -M 0 -R 9772:<local machine ip>:9971 root@<ip> -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N'
+
+[Install]
+WantedBy=default.target
+
+
+or use ssh or sshpass
+ExecStart=/bin/bash -c 'docker system prune -f && ./run-docker-compose.sh && /usr/bin/ssh -i /home/dhr/.ssh/id_rsa -v -NT -o ServerAliveInterval=60 -o ExitOnForwardFailure=yes -R 9772:0.0.0.0:9971 root@<ip>'
+ExecStart=/bin/bash -c 'docker system prune -f && ./run-docker-compose.sh && /usr/bin/sshpass -p '<pass>' /usr/bin/ssh -v -NT -o ServerAliveInterval=60 -o ExitOnForwardFailure=yes -R 9772:0.0.0.0:9971 root@<ip>'
+
+
+remove old containers that have a docker restart policy
+docker remove -f <container>
+
+sudo systemctl daemon-reload
+sudo systemctl start docker-cluster-controller.service
+sudo systemctl enable docker-cluster-controller.service
+
+verify that ssh tunnel is running
+ss -tnp | grep ssh

@@ -1,0 +1,115 @@
+version: '3'
+
+services:
+  mongodb:
+    image: mongo:latest
+    command:
+      [
+        "--replSet",
+        "rs0",
+        "--bind_ip_all",
+        "--port",
+        "27017"
+      ]
+    volumes:
+      - /var/lib/mongodb:/data/db
+      - /etc/mongod.conf:/etc/mongo/mongod.conf
+    container_name: mongodb
+    ports:
+      - 27017:27017
+    networks:
+      - cluster_controller_network
+    restart: on-failure
+
+  mysql:
+    image: mysql:latest
+    ports:
+      - "3306:3306"
+    command: --init-file /data/application/init.sql
+    volumes:
+      - /home/dhr/mysql:/var/lib/mysql
+      - ./printer-utilization/init.sql:/data/application/init.sql
+    container_name: mysql
+    networks:
+      - cluster_controller_network
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+    restart: on-failure
+
+  printer-service:
+    depends_on:
+      - mongodb
+    build:
+      context: printer-service
+    volumes:
+      - /home/dhr/log:/var/log/dhr
+      - /tmp:/temp
+    networks:
+      - cluster_controller_network
+    restart: on-failure
+
+  pantheon-api:
+    depends_on:
+      - mongodb
+    build:
+      context: pantheon-api
+    container_name: pantheon-api
+    networks:
+      - cluster_controller_network
+    volumes:
+      - /home/dhr/gcode_files/:/opt/dhr/pantheon-api/temp/
+      - /home/dhr/log:/var/log/dhr
+      - /home/dhr/FirmwareFlasher/firmwares/:/opt/dhr/FirmwareFlasher/firmwares/
+      - /home/dhr/filament/:/opt/dhr/filament/
+    restart: on-failure
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - cluster_controller_network
+    restart: on-failure
+
+  mosquitto:
+    volumes:
+      - "./robot-arm-orchestrator/mosquitto.conf:/mosquitto/config/mosquitto.conf"
+    image: eclipse-mosquitto
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    networks:
+      - cluster_controller_network
+    restart: on-failure
+
+  printer-utilization:
+    depends_on:
+      mysql:
+        condition: service_healthy
+    build:
+      context: printer-utilization
+    container_name: printer-utilization
+    networks:
+      - cluster_controller_network
+    restart: on-failure
+
+  robot-arm-orchestrator:
+    volumes:
+      - "./persistent:/opt/dhr/robot-arm-orchestrator/persistent"
+    build:
+      context: robot-arm-orchestrator
+    container_name: orchestrator
+    depends_on:
+      - mongodb
+      - rabbitmq
+      - mosquitto
+    networks:
+      - cluster_controller_network
+
+networks:
+  cluster_controller_network:
+    name: "cluster_controller_network"
+    driver: bridge
