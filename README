@@ -1,4 +1,4 @@
-git submodule update --init --remote --recursive
+git submodule update --init --recursive
 
 add "exit 0" at the end of run-docker-compose.sh in order not to break the following service when there are running containers with the same name
 
