@@ -1,0 +1,12 @@
+[Unit]
+Description=Dhr Software management framework running all services inside Docker containers and open reverse proxy ssh tunnel for pantheon API.
+After=docker.service
+
+[Service]
+Type=simple
+User=dhr
+WorkingDirectory=/home/dhr/dhr-software-management-framework
+ExecStart=/bin/bash -c 'docker system prune -f && ./run-docker-compose.sh && autossh -M 0 -R 9772:<local machine ip>:9971 root@<ip> -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N'
+
+[Install]
+WantedBy=default.target
