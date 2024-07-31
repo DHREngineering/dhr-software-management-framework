@@ -21,9 +21,6 @@ docker compose run --build --detach --name printer43 -p 50043:8080 printer-servi
 docker compose run --build --detach --name printer44 -p 50044:8080 printer-service 44 bambu
 docker compose run --build --detach --name printer45 -p 50045:8080 printer-service 45 bambu
 
-docker compose run --build --detach --name pantheon-api -p 9971:9971 pantheon-api
-
-docker compose run --name rabbitmq --build --detach -p 5672:5672 -p 15672:15672 -p 15692:15692 rabbitmq
 # add admin user after rabbitmq is up
 sleep 10
 docker exec rabbitmq bash -c "rabbitmq-plugins enable rabbitmq_management &&
@@ -31,7 +28,7 @@ rabbitmqctl add_user admin admin &&
 rabbitmqctl set_user_tags admin administrator &&
 rabbitmqctl set_permissions -p / admin '.*' '.*' '.*'"
 
-docker compose run --name mosquitto --build --detach -p 1883:1883 -p 9001:9001 mosquitto
+docker compose run --build --detach --name pantheon-api -p 9971:9971 pantheon-api
 
 if [ ! -d "/home/dhr/mysql" ]; then
     mkdir /home/dhr/mysql

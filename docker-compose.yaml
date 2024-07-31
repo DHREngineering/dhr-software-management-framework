@@ -39,6 +39,7 @@ services:
   printer-service:
     depends_on:
       - mongodb
+      - rabbitmq
     build:
       context: printer-service
     volumes:
@@ -98,7 +99,7 @@ services:
 
   robot-arm-orchestrator:
     volumes:
-      - "./persistent:/opt/dhr/robot-arm-orchestrator/persistent"
+      - "./robot-arm-orchestrator/persistent:/opt/dhr/robot-arm-orchestrator/persistent"
     build:
       context: robot-arm-orchestrator
     container_name: orchestrator
