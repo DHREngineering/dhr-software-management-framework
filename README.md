@@ -1,29 +1,44 @@
 # dhr-software-management-framework
 
-The DHR Software Management Framework is the central project for the 3D printing farm and includes the following key services, listed as [Git Submodules](#git-submodules):
+## Overview
+
+The DHR Software Management Framework is the central project for the 3D printing farm and includes the following key services, listed as Git Submodules and operating within Docker containers on the same Docker network (You can read more about them and the techstack by following the links):
 
 * [Printer Service](https://github.com/DHREngineering/printer-service)  
-Python-based automation tool that manages 3D printers by handling monitoring, control, and file management while integrating with the other services for usage tracking and print job completion notifications. Stores and reads data in MongoDB.
+Python-based automation tool for managing 3D printers, including monitoring, control, and automatic handling of G-code file uploads. It integrates with Printer Utilization to track usage and sends print job completion notifications to the Robot Arm Orchestrator via RabbitMQ. Data is stored and accessed through MongoDB.
 
 * [Pantheon API](https://github.com/DHREngineering/pantheon-api)  
-FastAPI application for managing 3D printer services and resources, offering monitoring, control (gRPC client), file management, utilization reporting, and integration with Docker and Swagger for streamlined deployment and documentation. Stores and reads data in the same MongoDB.
+FastAPI application that serves as the backend for our [Dashboard](https://3dhrmanager.com/). It manages and monitors the data in MongoDB, Printer Services, Printer Utilization, G-code files, Print beds. And Robot Arm, and Robot Arm Orchestrator via 3D Printer Pantheon Control Panel API.
 
 * [Printer Utilization](https://github.com/DHREngineering/printer-utilization)  
-Python-based automation tool to track and analyze 3D printer usage by querying real-time status and print job completions, with data stored in MySQL for scalability and consistent operation.
+Python-based automation tool to track and analyze Printer Service usage by querying real-time status and print job completions, with data stored in MySQL.
 
-* [Robot Arm Orchestrator](https://github.com/DHREngineering/robot-arm-orchestrator)
+* [Robot Arm Orchestrator](https://github.com/DHREngineering/robot-arm-orchestrator)  
+Python-based automation tool that processes print completion notifications from the Printer Service via RabbitMQ. It then directs the Robot Arm by pushing tasks to the Mosquitto MQTT broker to which RobotArm is subscribed. The tasks are take (printed part retrieval) and replace (put a new print bed plate), managing the selection of appropriate beds according to their location and type.
 
-In addition, there are other services utilized but not integrated into this project:
+Additionally, there are other services used in the system that aren't integrated into this project or Docker cluster. These dependencies are accessed via the hosts IPs:
 
-* [Robot Arm](https://github.com/DHREngineering/RobotArm)
-* [3D Printer Pantheon Control Panel API](https://github.com/DHREngineering/3DPrinterPantheonControlPanelAPI)
-* [SFTP Server](#sftp)  
-Where [G-code](#gcode) files are stored.
-* [Pricing and gcode slicer API](https://github.com/DHREngineering/slicer)
+* [Robot Arm](https://github.com/DHREngineering/RobotArm)  
+Python ROS application for controlling the Robot Arm PLC either manually or via state machines with predefined positions for printers and print beds. It handles the retrieval of printed parts and the replacement of print bed plates. Additionally, it offers a FastAPI application for manual robot control.
+
+* [3D Printer Pantheon Control Panel API](https://github.com/DHREngineering/3DPrinterPantheonControlPanelAPI)  
+FastAPI application for managing and monitoring the Robot Arm and Robot Arm Orchestrator. It handles checking statuses, starting and stopping services, purging queues, and retrieving logs, all via SSH connections to the hosts running the services.
+
+* SFTP Server deployed within a Docker container used for storing the G-code files.
+
+* [Pricing and gcode slicer API](https://github.com/DHREngineering/slicer)  
+FastAPI application for converting STL and STEP files into G-code. It provides an endpoint for retrieving print model pricing, used by the [3DHR shop](https://3dhr.eu/bg/), and another endpoint for automatically slicing models and uploading the G-code to the Pantheon API, accessed by the [WordPress backend of the 3DHR shop](https://3dhr.eu/wp-admin).
+
+* [Datadog](https://github.com/DHREngineering/datadog)  
+A monitoring and analytics platform that offers real-time insights into metrics, logs, and traces. The Datadog agent operates within a Docker container to ensure comprehensive performance monitoring and optimization.
 
 ## How to run
 
 ### Setup
+
+install docker and docker compose  
+`$ sudo apt update && sudo apt upgrade`  
+`$ sudo apt install docker && sudo apt install docker-compose`
 
 Clone this repository.  
 `$ git clone git@github.com:DHREngineering/dhr-software-management-framework.git`
@@ -31,120 +46,140 @@ Clone this repository.
 Cd into the directory.  
 `$ cd dhr-software-management-framework`
 
-Update the [Git Submodules](#git-submodules).  
+Update the Git Submodules.  
 `$ git submodule update --init --recursive`
 
-`$ sudo cp dhr-software-management-framework.service /etc/systemd/system/dhr-software-management-framework.service`  
-`$ sudo systemctl daemon-reload`
+### Run locally for testing
 
-Make sure that all [Dependencies](#dependencies):
+Execute the [Run script](run-docker-compose.sh)  
+`$ ./run-docker-compose.sh`  
+This starts the Printer Services and their dependencies - MongoDB and RabbitMQ, Pantheon API, Printer Utilization and its dependency - MySQL. Also creates a RabbitMQ admin user.  
+***The services interface directly with physical printers, SFTP server and 3D Printer Pantheon Control Panel API so please exercise caution when sending commands!***
 
-* autossh, docker and docker compose are installed.
-* the necessary ports are allowed.
-* SFTP server, RobotArm and 3DPrinterPantheonControlPanelAPI are running
-* configurations are correct
-
-### Run
-
-`$ sudo systemctl start dhr-software-management-framework.service`  
-`$ sudo systemctl enable dhr-software-management-framework.service`
+The orchestrator is run separately for safety reasons:  
+`$ ./run-docker-compose-orchestrator.sh`  
+This starts it the dependencies - RabbitMQ (if not already started) and Mosquitto MQTT broker  
+***To actually control the Robot Arm, it must be subscribed to this broker.***
 
 ### Debug
 
-`$ sudo systemctl status dhr-software-management-framework.service`  
-`$ sudo journalctl -u dhr-software-management-framework.service`
-
 `$ docker ps`  
 `$ docker logs -f <container_name>`  
-This can also be done from [Portainer](#portainer).
-
-verify the ssh tunnel is running  
-`$ ss -tnp | grep ssh`
+This can also be done from Portainer.
 
 ### Stop and clean up
 
 `$ docker kill <container_name>`  
 `$ docker system prune`  
-This can also be done from [Portainer](#portainer).
+This can also be done from Portainer.
 
-## Used technologies
+## CURRENT DEPLOYMENT
 
-### Git, GitHub
+The 3D Printing Farm system consists of multiple repositories distributed across different hosts:
 
-#### Git
+### 192.168.0.100 - This repository, Datadog
 
-Git is a distributed version control system that tracks changes to files and coordinates work among multiple contributors.
+`$ ssh dhr@192.168.0.100`  
 
-#### GitHub
+To set up automatic service management and create an SSH tunnel that connects the Dashboard with the Pantheon API, follow these steps:  
 
-GitHub is a platform that provides hosting for Git repositories, collaborative tools for developers, and facilitates code management and sharing.
+`dhr@dhr:~$ sudo apt install autossh`  
+Edit the remote machine ip in `ubuntu_services/dhr-software-management-framework.service` and copy it  
+`dhr@dhr:~$ sudo cp ubuntu_services/dhr-software-management-framework.service /etc/systemd/system/dhr-software-management-framework.service`  
+`dhr@dhr:~$ sudo systemctl daemon-reload`  
 
-Most of DHR Engineering's repositories can be found inside the [DHR Engineering GitHub organization](https://github.com/DHREngineering)
+Allow necessary ports - 22, 27017, 9971, 15672, 3306, 1883, 5672, 90, 9000, 9443  
+`dhr@dhr:~$ sudo ufw allow <port>`  
 
-GitHub Actions is a CI/CD automation tool that allows you to create custom workflows for building, testing, and deploying code directly from your GitHub repository.
+Start the service  
+`dhr@dhr:~$ sudo systemctl start dhr-software-management-framework.service`  
+`dhr@dhr:~$ sudo systemctl enable dhr-software-management-framework.service`  
 
-#### Git Submodules
+Verify the service is active and the ssh tunnel is running  
+`dhr@dhr:~$ sudo systemctl status dhr-software-management-framework.service`  
+`dhr@dhr:~$ sudo journalctl -u dhr-software-management-framework.service`  
+`dhr@dhr:~$ ss -tnp | grep ssh`
 
-[Git Submodules](.gitmodules) are a feature in Git that allows a repository to include and manage external repositories within its directory, enabling the main project to incorporate and track dependencies on other projects.
+Manually start the orchestrator from 3D Printer Pantheon Control Panel API running at <http://192.168.0.127:30000/docs#/default/restart_service_orchestrator_start_post>  
 
-...
+Ubuntu service to automatically run Portainer
+`dhr@dhr:~$ sudo cp ubuntu_services/portainer.service /etc/systemd/system/portainer.service`  
+`dhr@dhr:~$ sudo systemctl start portainer.service`  
+`dhr@dhr:~$ sudo systemctl enable portainer.service`  
 
-Update the git submodules.  
-`$ git submodule update --init --recursive`
+Ubuntu service to automatically run Datadog
+`dhr@dhr:~$ cd /home/dhr/`  
+`dhr@dhr:~$ git clone git@github.com:DHREngineering/datadog.git`  
+`dhr@dhr:~$ sudo cp ubuntu_services/datadog.service /etc/systemd/system/datadog.service`  
+`dhr@dhr:~$ sudo systemctl start datadog.service`  
+`dhr@dhr:~$ sudo systemctl enable datadog.service`  
 
-### Docker
+### 192.168.0.109 - SFTP server for G-code files
 
-Enables effortless deployment and management of multiple instances tailored for different printers, enhancing scalability, updates, and consistent operation across various environments. It optimizes resource utilization, isolates dependencies, and boosts system reliability and flexibility.
+`$ ssh dhr@192.168.0.109`
 
-The Dockerfile contains instructions for building a Docker image. It is used to define the environment, dependencies, and other configurations required to run an application inside a Docker container.
+`dhr@dhr:~$ sudo cp ubuntu_services/sftp.service /etc/systemd/system/sftp.service`  
+`dhr@dhr:~$ sudo systemctl start sftp.service`  
+`dhr@dhr:~$ sudo systemctl enable sftp.service`  
 
-The [docker-compose.yaml](docker-compose.yaml) file help us easily run and manage multiple containers, the dependencies between them, networking and so on.
-It specifies that the dhr-software-management-framework Docker container(s), depend on the [MongoDB](#mongodb) container (which is an instance of a official public MongoDB image). It also defines the Docker network where the containers run.
-...
+### 192.168.0.127 - RobotArm and 3D Printer Pantheon Control Panel API, Datadog
 
-To run manually, execute the [Run script](run-docker-compose.sh).  
-`$ ./run-docker-compose.sh`  
-This starts the dhr-software-management-framework container(s) as well as a mongo container.
-...
+`$ ssh dhr@192.168.0.127`  
 
-To stop and clean up run:  
-`$ docker kill <container_name>`  
-`$ docker system prune`  
-This can also be done from [Portainer](#portainer).
+Ubuntu service to automatically run 3D Printer Pantheon Control Panel API  
+`dhr@dhr:~$ cd /home/dhr/`  
+`dhr@dhr:~$ git clone git@github.com:DHREngineering/3DPrinterPantheonControlPanelAPI.git`  
+`dhr@dhr:~$ sudo cp ubuntu_services/robot-arm-api.service /lib/systemd/system/robot-arm-api.service`  
+`dhr@dhr:~$ sudo systemctl start robot-arm-api.service`  
+`dhr@dhr:~$ sudo systemctl enable robot-arm-api.service`  
 
-#### Portainer
+Manually start the RobotArm from 3D Printer Pantheon Control Panel API - <http://192.168.0.127:30000/docs#/default/start_robot_robot_start_post>  
+This runs RobotArm inside a tmux session that you can access with  
+`dhr@dhr:~$ tmux attach`  
+This includes Robot Arm Web Controls API to manually control the robot.
 
-Portainer is a lightweight management GUI tool that allows you to easily manage your Docker environments, including containers, images, networks, and volumes.
+Ubuntu service to automatically run Datadog
+`dhr@dhr:~$ sudo cp ubuntu_services/datadog.service /etc/systemd/system/datadog.service`  
+`dhr@dhr:~$ sudo systemctl start datadog.service`  
+`dhr@dhr:~$ sudo systemctl enable datadog.service`  
 
-Run the following command on the same machine as the docker containers you would like to monitor/manage:  
-`$ docker run -d -p 9000:9000 -p 9443:9443 --name portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data --name portainer portainer/portainer-ce:latest`
+### Remote machine - Pricing and gcode slicer API
 
-You can access the tool at `http://<ip>:9000/#!/2/docker/containers`, where you can:
+`$ ssh root@...135`  
 
-* monitor logs
-* inspect containers
-* start, stop, restart, kill, remove containers. ***Be careful in production.***
-* attach a shell to a container
+The API is currently run within a Docker container that is an instance of a plain ubuntu image  
+`$ root@F055788:~# docker exec -ti 359800a4dd78 bash`  
+`$ root@359800a4dd78:/# cd root/slider_nedko/`  
+`$ git clone git@github.com:DHREngineering/slicer.git`
 
-## Architecture
+it is run inside a tmux session:  
+`$ root@359800a4dd78:~/slider_nedko# tmux attach`
 
-The printer service runs inside a docker container as a single service, where mutiple [Microservice](#microservices) objects can live together. This facilitates easy setup and control of multiple printer-specific instances of the printer service, ensuring seamless scalability and consistent operation.
+## Tools in the Current Deployment
 
-## Key Features
+***Please be mindful using these tools!***  
+***For passwords check in config files or ask around ;)***
 
-* **Compatibility**: Works seamlessly with different types of printers utilizing multiple client interfaces. Achieved by instantiating an object of an implementation of the [Printer Client](#printer-client) abstract class
+* [Portainer](http://192.168.0.100:9000/) - A a web UI for managing and monitoring Docker containers
 
-* **Monitoring**:: Track printer status, printing progress, and more. Achieved by instantiating a [State Service Object](#state-service-object).
+* [Dashboard](https://3dhrmanager.com/) - A web application for managing and monitoring the 3D Printing Farm
 
-* **Control**: Ability to send commands to the printers: print management (set available, cancel, resume, pause), advanced G-code commands (move bed on Z axis), and real-time status reports. Achieved by instantiating a [gRPC Server Object](#grpc-server-object)
+* [PantheonApi](https://pantheon.3dhrmanager.com/docs) - The backend serving the Dashboard
 
-* **File Management**: Automates the retrieval of appropriate G-code file from the SFTP server according to the printer configuration and state and uploads it to the printer, tracking number of printed copies.  Achieved by instantiating a [Available Service Object](#available-service-object) and [State Service Object](#state-service-object).
+* MongoDB Compass - a MongoDB client used to access the db that stores the current state of the farm.  
+Connect via SSH with Password to host 192.168.0.100.
 
-* **Utilization Reporting**: Notifies the [Printer Utilizarion](https://github.com/DHREngineering/printer-utilization) upon print completion for accurate usage tracking. Achieved by instantiating a [Print Job Service Object](#print-job-service-object).  
-Can be prompted by Printer Utilizarion service for real-time status report that can be logged and subsequently analyzed to inspect printer usage. Achieved by calling the [GetStatus Endpoint](#getstatus-endpoint) of the [gRPC Server Object](#grpc-server-object).
+* mysql-client - a mysql client to access the db that stores the 3D printers utilization data  
+`$ mysql -h 192.168.0.100 -u root -p utilization`  
 
-* **Print Completion Notification**: Notify [RobotArm Orchestrator](https://github.com/DHREngineering/robot-arm-orchestrator) upon print completion for automated retrieval of the printed part and subsequent replace of the bed plate. Achieved by instantiating a [State Service Object](#state-service-object).
+* [3D Printer Pantheon Control Panel API](http://192.168.0.127:30000/docs) - a FastAPI application for managing and monitoring Robot Arm and Robot Arm Orchestrator
 
-* **Scalability**: [Docker](#docker) facilitates easy setup and control of multiple printer-specific instances, ensuring seamless scalability and consistent operation.
+* [RabbitMQ](http://192.168.0.100:15672/) - a message broker for handling print completion notifications exchange
 
-## Updates
+* [Robot Arm Web Controls API](<http://192.168.0.127:8000/>) - a web application to manually control the Robot Arm
+
+* [Datadog Dashboard](<https://app.datadoghq.eu/dashboard/36c-n2c-6n8/>) - a cloud-based platform for monitoring and analytics of the infrastructure (hosts).
+
+* [Pricing and gcode slicer API](<https://dhr3dpricingapiservice.xyz/docs#/>) - a FastAPI application for converting STL and STEP files into G-code.
+
+* [WordPress application](https://3dhr.eu/wp-admin) - Backend for the [3DHR shop](https://3dhr.eu/bg/)

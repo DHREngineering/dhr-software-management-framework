@@ -1,0 +1,11 @@
+[Unit]
+Description=Run datadog agent inside a docker container
+After=docker.service dhr-software-management-framework.service
+
+[Service]
+Type=simple
+User=dhr
+ExecStart=/bin/bash -c 'docker run --network cluster_controller_network -d -p 9000:9000 -p 9443:9443 --name portainer --restart=on-failure -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce:latest'
+
+[Install]
+WantedBy=default.target

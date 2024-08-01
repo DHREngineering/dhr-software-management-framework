@@ -1,0 +1,20 @@
+[Unit]
+Description=Robot Arm API
+After=network.target
+
+[Service]
+Restart=on-failure
+RestartSec=1s
+Environment="USERNAMESERVER=root"
+Environment="PASSWORDSERVER=<PASSWORD>"
+Environment="IPSERVER=192.168.0.100"
+Environment="PORTSERVER=22"
+Environment="USERNAME=dhr"
+Environment="PASSWORD=<PASSWORD>"
+ExecStart=/bin/bash -c "source /opt/ros/galactic/setup.bash && /usr/bin/python3 /home/dhr/3DPrinterPantheonControlPanelAPI/main.py"
+WorkingDirectory=/home/dhr/3DPrinterPantheonControlPanelAPI
+User=dhr
+
+[Install]
+WantedBy=multi-user.target
+
