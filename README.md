@@ -5,7 +5,7 @@
 The DHR Software Management Framework is the central project for the 3D printing farm and includes the following key services, listed as Git Submodules and operating within Docker containers on the same Docker network (You can read more about them and the techstack by following the links):
 
 * [Printer Service](https://github.com/DHREngineering/printer-service)  
-Python-based automation tool for managing 3D printers, including monitoring, control, and automatic handling of G-code file uploads. It integrates with Printer Utilization to track usage and sends print job completion notifications to the Robot Arm Orchestrator via RabbitMQ. Data is stored and accessed through MongoDB.
+Python-based automation tool for managing 3D printers, including monitoring, control, and automatic handling of G-code file uploads. It integrates with Printer Utilization to track usage and sends print job completion notifications to the Robot Arm Orchestrator via RabbitMQ "ready" queue. Data is stored and accessed through MongoDB.
 
 * [Pantheon API](https://github.com/DHREngineering/pantheon-api)  
 FastAPI application that serves as the backend for our [Dashboard](https://3dhrmanager.com/). It manages and monitors the data in MongoDB, Printer Services, Printer Utilization, G-code files, Print beds. And Robot Arm, and Robot Arm Orchestrator via 3D Printer Pantheon Control Panel API.
@@ -14,7 +14,7 @@ FastAPI application that serves as the backend for our [Dashboard](https://3dhrm
 Python-based automation tool to track and analyze Printer Service usage by querying real-time status and print job completions, with data stored in MySQL.
 
 * [Robot Arm Orchestrator](https://github.com/DHREngineering/robot-arm-orchestrator)  
-Python-based automation tool that processes print completion notifications from the Printer Service via RabbitMQ. It then directs the Robot Arm by pushing tasks to the Mosquitto MQTT broker to which RobotArm is subscribed. The tasks are take (printed part retrieval) and replace (put a new print bed plate), managing the selection of appropriate beds according to their location and type.
+Python-based automation tool that processes print completion notifications from the Printer Service via RabbitMQ "ready" queue. It then directs the Robot Arm by pushing tasks to the Mosquitto MQTT broker to which RobotArm is subscribed. The tasks are take (printed part retrieval) and replace (put a new print bed plate), managing the selection of appropriate beds according to their location and type. Additionally it sends a homing task to the robot every 24h through the "homing" queue.
 
 Additionally, there are other services used in the system that aren't integrated into this project or Docker cluster. These dependencies are accessed via the hosts IPs:
 
@@ -102,12 +102,14 @@ Verify the service is active and the ssh tunnel is running
 
 Manually start the orchestrator from 3D Printer Pantheon Control Panel API running at <http://192.168.0.127:30000/docs#/default/restart_service_orchestrator_start_post>  
 
-Ubuntu service to automatically run Portainer
+If you'd like to run a cron job to send homing tasks to the robot-arm-orchestrator every 24h follow [these steps](homing_task_cron_job/README.md)
+
+Ubuntu service to automatically run Portainer  
 `dhr@dhr:~$ sudo cp ubuntu_services/portainer.service /etc/systemd/system/portainer.service`  
 `dhr@dhr:~$ sudo systemctl start portainer.service`  
 `dhr@dhr:~$ sudo systemctl enable portainer.service`  
 
-Ubuntu service to automatically run Datadog
+Ubuntu service to automatically run Datadog  
 `dhr@dhr:~$ cd /home/dhr/`  
 `dhr@dhr:~$ git clone git@github.com:DHREngineering/datadog.git`  
 `dhr@dhr:~$ sudo cp ubuntu_services/datadog.service /etc/systemd/system/datadog.service`  
@@ -138,7 +140,7 @@ This runs RobotArm inside a tmux session that you can access with
 `dhr@dhr:~$ tmux attach`  
 This includes Robot Arm Web Controls API to manually control the robot.
 
-Ubuntu service to automatically run Datadog
+Ubuntu service to automatically run Datadog  
 `dhr@dhr:~$ sudo cp ubuntu_services/datadog.service /etc/systemd/system/datadog.service`  
 `dhr@dhr:~$ sudo systemctl start datadog.service`  
 `dhr@dhr:~$ sudo systemctl enable datadog.service`  
@@ -160,26 +162,72 @@ it is run inside a tmux session:
 ***Please be mindful using these tools!***  
 ***For passwords check in config files or ask around ;)***
 
-* [Portainer](http://192.168.0.100:9000/) - A a web UI for managing and monitoring Docker containers
-
 * [Dashboard](https://3dhrmanager.com/) - A web application for managing and monitoring the 3D Printing Farm
+
+* [Portainer](http://192.168.0.100:9000/) - A a web UI for managing and monitoring Docker containers
 
 * [PantheonApi](https://pantheon.3dhrmanager.com/docs) - The backend serving the Dashboard
 
-* MongoDB Compass - a MongoDB client used to access the db that stores the current state of the farm.  
+* [MongoDB Compass](https://www.mongodb.com/products/tools/compass) - a MongoDB client used to access the db that stores the current state of the farm.  
 Connect via SSH with Password to host 192.168.0.100.
 
 * mysql-client - a mysql client to access the db that stores the 3D printers utilization data  
 `$ mysql -h 192.168.0.100 -u root -p utilization`  
 
-* [3D Printer Pantheon Control Panel API](http://192.168.0.127:30000/docs) - a FastAPI application for managing and monitoring Robot Arm and Robot Arm Orchestrator
+* [RabbitMQ](http://192.168.0.100:15672/) - a message broker for handling two types of messages: print completion notifications and robot homing requests. You can simulate a print completion by pushing <printer_id> into the `ready` queue and can make the robot home by pushing anything into the `homing` queue.
 
-* [RabbitMQ](http://192.168.0.100:15672/) - a message broker for handling print completion notifications exchange
+* [3D Printer Pantheon Control Panel API](http://192.168.0.127:30000/docs) - a FastAPI application for managing and monitoring Robot Arm and Robot Arm Orchestrator
 
 * [Robot Arm Web Controls API](<http://192.168.0.127:8000/>) - a web application to manually control the Robot Arm
 
 * [Datadog Dashboard](<https://app.datadoghq.eu/dashboard/36c-n2c-6n8/>) - a cloud-based platform for monitoring and analytics of the infrastructure (hosts).
 
-* [Pricing and gcode slicer API](<https://dhr3dpricingapiservice.xyz/docs#/>) - a FastAPI application for converting STL and STEP files into G-code.
+* [Pricing and gcode slicer API](<https://dhr3dpricingapiservice.xyz/docs#/>) - a FastAPI application for converting STL and STEP files into G-code (and calculating the resale price)
 
 * [WordPress application](https://3dhr.eu/wp-admin) - Backend for the [3DHR shop](https://3dhr.eu/bg/)
+
+* [MQTT Explorer](http://mqtt-explorer.com/) - a tool for visualizing and managing MQTT message traffic.  
+Topics on the broker at `mqtt://192.168.0.100:1883`:
+  * **robot_arm/status** - subsribe to receive notifications when the robot changes its status, and you can even push `{"status": "available"}` to simulate the robot changing status to available.
+
+  * **robot_arm/job** You can send the following jobs:  
+  ***First make sure the orchestrator is stopped!***
+    * take
+
+        ```json
+        {
+            "printer_id":14,
+            "bed_id":801,
+            "take_from_printer":true,
+            "load_next_bed_without_homing":true,
+            "open_doors":[
+                "printer14"
+            ]
+        }
+        ```
+
+    * replace
+
+        ```json
+        {
+            "printer_id":14,
+            "bed_id":801,
+            "take_from_printer":false,
+            "load_next_bed_without_homing":true,
+            "open_doors":[
+                "printer14"
+            ]
+        }
+        ```
+
+    * homing
+
+        ```json
+        {
+            "printer_id":null,
+            "bed_id":null,
+            "take_from_printer":false,
+            "load_next_bed_without_homing":false,
+            "open_doors":[]
+        }
+        ```
