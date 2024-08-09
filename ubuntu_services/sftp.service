@@ -1,0 +1,11 @@
+[Unit]
+Description=Run SFTP server inside a Docker container
+After=docker.service
+
+[Service]
+Type=simple
+User=dhr
+ExecStart=/bin/bash -c 'docker system prune -f && docker run -v /home/dhr/sftp_server/:/home/dhr/sftp_server -p 2222:22 -d --name sftp_server --restart=on-failure atmoz/sftp dhr:0000'
+
+[Install]
+WantedBy=default.target
